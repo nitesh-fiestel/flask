@@ -1,67 +1,114 @@
-import matplotlib.pyplot as plt
-import io
-import base64
-from flask import Flask, render_template, request
+from flask import Flask, render_template, redirect, url_for, request, flash
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+
+from service.auth_service import AuthService
+from service.request import Request
+from service.user_service import UserService
 
 app = Flask(__name__)
+app.secret_key = 'your_secret_key'  # Necessary for session management
 
-# SIP Calculation Function
-def calculate_sip(monthly_investment, interest_rate, years):
-    n = years * 12
-    r = interest_rate / 100 / 12
-    future_value = monthly_investment * (((1 + r) ** n - 1) / r) * (1 + r)
-    return round(future_value, 2)
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'  # Redirect to login page if unauthorized access
 
-# Generate Yearly SIP Data for Graph
-def yearly_sip_growth(monthly_investment, interest_rate, years):
-    yearly_totals = []
-    total_amount = 0
-    r = interest_rate / 100 / 12
+# Mock database of users
+users = Request.getAllUsers("http://localhost:8080/api/users/all")
 
-    for year in range(1, years + 1):
-        months = year * 12
-        total_amount = monthly_investment * (((1 + r) ** months - 1) / r) * (1 + r)
-        yearly_totals.append((year, round(total_amount, 2)))
+# User class
+class User(UserMixin):
+    def __init__(self, id, username, name):
+        self.id = username
+        self.userId = id
+        self.name = name
 
-    return yearly_totals
+# User loader function
+@login_manager.user_loader
+def load_user(username):
+    if username in users:
+        id = users[username]["id"]
+        return User(str(id), username, users[username]["name"])
+    return None
 
-# Generate and Save Graph
-def generate_graph(yearly_data):
-    years, amounts = zip(*yearly_data)
+# Login route
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        auth = AuthService.authenticate(username, password)
+        if(auth["authenticated"]):
+            user = User(auth["id"], username, auth["name"])
+            login_user(user)
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('dashboard'))
+        else:
+            return render_template('login.html')
+    return render_template('login.html')
 
-    plt.figure(figsize=(8, 5))
-    plt.bar(years, amounts, color='skyblue')
-    plt.xlabel("Years")
-    plt.ylabel("Total Amount (₹)")
-    plt.title("SIP Yearly Growth")
+# Dashboard route
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    print(UserService.getFollowing(current_user.userId), "qqqqqqqqqqq")
+    followingIds = [obj["followingId"]for obj in UserService.getFollowing(current_user.userId)["followers"]]
+    emails = []
+    for user in users:
+        if users[user]["id"] in followingIds:
+            emails.append(users[user]["email"])
 
-    # Save to a buffer
-    img = io.BytesIO()
-    plt.savefig(img, format="png")
-    img.seek(0)
-    plot_url = base64.b64encode(img.getvalue()).decode()
-    plt.close()
-    return plot_url
+    feed = UserService.getFeed(current_user.userId, users)
+    return render_template('dashboard.html', name=current_user.name, items = feed, sidebar_items = emails, users = users)
 
-@app.route("/", methods=["GET", "POST"])
+# Logout route
+@app.route('/logout', methods=['POST'])
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+# Home route
+@app.route('/')
 def home():
-    if request.method == "POST":
-        try:
-            monthly_investment = float(request.form["monthly_investment"])
-            interest_rate = float(request.form["interest_rate"])
-            years = int(request.form["years"])
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
 
-            final_amount = calculate_sip(monthly_investment, interest_rate, years)
-            yearly_data = yearly_sip_growth(monthly_investment, interest_rate, years)
-            graph_url = generate_graph(yearly_data)
+@app.route('/follow', methods=['POST'])
+@login_required
+def follow():
+    username_to_follow = request.form.get('username_to_follow')
+    if username_to_follow:
+        # Implement the logic to follow the user here
+        # For example, call a service function to handle the follow action
+        success = UserService.follow(current_user.userId, users[username_to_follow]["id"])
+        if success:
+            flash(f'Successfully followed {username_to_follow}!', 'success')
+        else:
+            flash(f'Failed to follow {username_to_follow}.', 'danger')
+    else:
+        flash('No username provided.', 'warning')
+    return redirect(url_for('dashboard'))
 
-            return render_template("result.html", monthly_investment=monthly_investment,
-                                   interest_rate=interest_rate, years=years,
-                                   final_amount=final_amount, graph_url=graph_url)
-        except ValueError:
-            return render_template("index.html", error="Please enter valid numbers.")
+@app.route('/unfollow', methods=['POST'])
+@login_required
+def unfollow():
+    email_to_unfollow = request.form.get('unfollow_id')
+    print(email_to_unfollow, "unfollow")
+    if email_to_unfollow:
+        # Implement the logic to follow the user here
+        # For example, call a service function to handle the follow action
+        success = UserService.unfollow(current_user.userId, users[email_to_unfollow]["id"])
+        if success:
+            flash(f'Successfully followed {email_to_unfollow}!', 'success')
+        else:
+            flash(f'Failed to follow {email_to_unfollow}.', 'danger')
+    else:
+        flash('No username provided.', 'warning')
+    return redirect(url_for('dashboard'))
 
-    return render_template("index.html")
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+if __name__ == '__main__':
+    app.run(debug=True)

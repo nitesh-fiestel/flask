@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <a class="navbar-brand" href="#">Following</a>
+    <div class="collapse navbar-collapse">
+        <ul class="navbar-nav ml-auto">
+            <li class="nav-item">
+                <form method="post" action="{{ url_for('logout') }}">
+                    <button type="submit" class="btn btn-outline-danger">Logout</button>
+                </form>
+            </li>
+        </ul>
+    </div>
+</nav>
+<div class="container-fluid">
+    <div class="row">
+<nav id="sidebar" class="col-md-3 col-lg-2 d-md-block bg-light sidebar">
+    <div class="position-sticky">
+        <ul class="list-group">
+            {% for item in sidebar_items %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                {{ users[item]["name"] }}
+                <form method="post" action="{{ url_for('unfollow') }}">
+                    <button type="submit" class="btn btn-sm btn-primary" value={{item}} name="unfollow_id">Unfollow</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</nav>
+
+<div class="container mt-4">
+    <h1>Welcome, {{ name }}!</h1>
+    <p>This is your dashboard.</p>
+    <form method="post" action="{{ url_for('follow') }}">
+        <div class="form-group">
+            <label for="followInput">Enter User to Follow:</label>
+            <input type="text" class="form-control" id="followInput" name="username_to_follow" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Follow</button>
+    </form>
+
+    <div class="row mt-4">
+        {% for item in items %}
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">{{ item.username }}</h5>
+                    <p class="card-text">{{ item.content }}</p>
+                    <!-- Add more content as needed -->
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <!--Sidebar-->
+<nav id="sidebar" class="col-md-3 col-lg-3  bg-light sidebar">
+    <div class="position-sticky"><a class="navbar-brand" href="#">Users you may know</a>
+        <ul class="list-group">
+            {% for item in users %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                {{ users[item]["name"] }}
+                <form method="post" action="{{ url_for('follow') }}">
+                    <button type="submit" class="btn btn-sm btn-primary" value={{item}} name="username_to_follow">Follow</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</nav>
+    </div></div>
+</div>
+{% endblock %}
